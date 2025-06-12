@@ -1,16 +1,31 @@
-/* Audio Visualiser version 3: 
-In the previous version of the code, the following updates were made:
-1) The implementation of Level 4 was updated. It was originally expected to rotate only within a fixed range, but after trying many methods, it still could not be achieved. Therefore, it was changed to rotate several graphics of the entire interface.
-2) Tried Level 1 and successfully made points+line according to the reference code and ran along the spectrum.
-3) Tried Level 2, but failed and could not display the character.
-4) The color change effect of the character stroke is cancelled because the Level 4 stroke cannot follow the color change.
+/* Audio Visualiser version 4: 
+When I began coding this individual-task version, our group project still wasn’t finished, so I built my work on the then-current group code inside the p5 editor:
+https://editor.p5js.org/yslllll122/sketches/DR4BRUbC2 
 
-· When I created this code, the group code was not fully completed, 
-so I created it in the p5 editor, my original code refer to: https://editor.p5js.org/yslllll122/sketches/taxwkd_pr
-Since after the group code is completed, my historical code based on the historical version of the group code can no longer be started normally. 
-So the following is the group code I tried at that time. */
+My final audio-visualiser has now been merged back into the group’s master code-base.
+Compared with the previous audio visualiser (version 3), the changes are:
+1) Level 1 – identical to version 3; no functional changes.
+2) Level 2
+· Display width: enlarged from one-fifth of the canvas to the full width; column count is now 5× higher.
+· Horizontal wobble: removed noiseRatio (Perlin noise) because the project isn’t Perlin-noise-centric; motion now relies only on two phase-shifted sine waves, giving cleaner movement.
+· Speed vs. volume: added tempoFactor so louder audio increases the phase-increment of both sine waves.
+· Swing amplitude: upper limit raised by ~1.7×, so strong beats shake the dots more violently.
+3) Level 3
+· Refactored the push/pop structure to eliminate one state-stack round-trip; visuals remain unchanged.
+!! Please note: everything is driven by the audio FFT; Perlin noise is kept only because the reference sketch #1725734 used a flow-field—this visualiser itself is not Perlin-noise-centric.
+4) Level 4
+· Shape diversity: each grid cell now switches, according to mid-band energy, between wireframe circle / filled circle / rounded rectangle, replacing the previous fixed double-square.
+· Simpler layering: the extra stroked square has been removed, making the scene lighter and more chaotic; rotation, colour palette and random eSize twitching are unchanged.
+----------------------------------------------
+Changes made to the group’s final source code to accommodate the merge:
+1) Added nostroke() around the character’s nostrils to prevent rapid colour flicker after integrating the audio code.
+2) Re-ordered ghost character rendering so it is drawn before the audio visualisations, ensuring that the Audio Visualiser layers sit on top. */
 
-let rez1;
+
+
+// These globals are declared at top-level so every function can see them
+// Define Variables
+let rez1; 
 let rez2;
 let gap;
 let length;
@@ -19,9 +34,6 @@ let startVary;
 let noiseGraphics; // Perlin noise part 
 
 // Merge lake and land L2-L4
-let btnWidth = 243.87;
-let btnHeight = 99.87;
-let btnRadius = 49.94;
 let activeLevel = 0;
 let originW = 1811;
 let originH = 1280;
@@ -34,24 +46,35 @@ let groups = [];
 // let currentExpression = 'level 1'; Because the lake land code already has let activeLevel = 0; to indicate the current level, so remove this first
 let buttons = [];
 
+// For Audio Visualiser
 // Particals, effect refer to: https://openprocessing.org/sketch/1725734
+// Copied from OpenProcessing #1725734 → original uses 2500 particles; reduced to 2200
+// So that L3 stays at 60 fps on laptop GPUs while keeping a dense “snow-storm” look
+
 const pCount = 2200;
 let pSpacing, pOffset = 8, pSpeed = 0.1;
 
-// Audio visualiser
 let musicL1, fftL1; // part1.mp3
 let l1Phase = 0; // phase accumulator
 let musicL2, fftL2; // part2.mp3
 let musicL3, fftL3; // part3.mp3
 let musicL4, fftL4; // part4.mp3
 let eSize = 40; // Original cube for level 4
-const l4Palette = ['#e1be1c','#c35314','#598bac','#1a4965','#151c2e','#69855f','#27453b','#cdb994'];
-const l1Palette = ['#e1be1c','#c35314','#598bac','#1a4965','#151c2e','#69855f','#27453b','#cdb994'];
-const l2Palette = ['#e1be1c','#c35314','#598bac','#1a4965','#151c2e','#69855f','#27453b','#cdb994'];
+const l4Palette = ['#e1be1c', '#c35314', '#598bac', '#1a4965', '#151c2e', '#69855f', '#27453b', '#cdb994'];
+const l1Palette = ['#e1be1c', '#c35314', '#598bac', '#1a4965', '#151c2e', '#69855f', '#27453b', '#cdb994'];
+const l2Palette = ['#e1be1c', '#c35314', '#598bac', '#1a4965', '#151c2e', '#69855f', '#27453b', '#cdb994'];
 
 // Colors
 const bass = { low: 200, high: 255, hueShift: 150 };
-const mid  = { low: 140, high: 170, hueShift: 220 };
+const mid = { low: 140, high: 170, hueShift: 220 };
+
+/* MUSIC  –  Antonio Vivaldi, The Four Seasons: Winter (Concerto No.4)
+1. I cut the whole song into 4 parts: part1-4.mp3, corresponding to the fear level 1-4
+2. To highlight the concept of "the higher the level, the more chaotic", parts 2-4 were sped up by about 5% / 10% / 15% in the audio editing software
+3. When clicking the button, only the current part is looped, and the rest are stopped immediately to avoid multi-track reverberation. - Refer to below buttons.push parts */
+
+// p5.sound reference: https://p5js.org/reference/#/p5.Sound
+// Below FFT(0.8,256) -> heavy temporal smoothing (0.0–1.0) and 256-band spectrum for a calmer, low-flicker display
 
 function preload() {
   musicL1 = loadSound('part1.mp3');
@@ -60,111 +83,62 @@ function preload() {
   musicL4 = loadSound('part4.mp3');
 }
 
-
-function createButtons() {
-  buttons = [];
-
-  // Change original height - 55 from my group member to 50
-  let y = 50;
-  let spacing = 150;
-
-
-  //Define Buttons - changed from my group member code to let lake and land work together
-  buttons.push(new Button("Level 1", width / 2 - spacing, y, () => {
-    activeLevel = 1;
-    if (!musicL1.isPlaying()) musicL1.loop();
-    if (musicL2.isPlaying()) musicL2.stop();
-    if (musicL3.isPlaying()) musicL3.stop();
-    if (musicL4.isPlaying()) musicL4.stop();
-    drawPG2();
-  }));
-  
-  buttons.push(new Button("Level 2", width / 2 - spacing / 3, y, () => {
-    activeLevel = 2;
-    if (musicL1.isPlaying()) musicL1.stop();
-    if (!musicL2.isPlaying()) musicL2.loop();
-    if (musicL3.isPlaying()) musicL3.stop();
-    if (musicL4.isPlaying()) musicL4.stop();
-    drawPG2();
-  }));
-  
-  // buttons.push(new Button("Level 3", width / 2 + spacing / 3, y, () => {
-  //   activeLevel = 3;
-  //   drawPG2();
-  // }));
-  
-  // Add button plays music
-  buttons.push(new Button("Level 3", width / 2 + spacing / 3, y, () => {
-  activeLevel = 3;
-  if (musicL1.isPlaying()) musicL1.stop();
-  if (musicL2.isPlaying()) musicL2.stop();
-  if (musicL4.isPlaying()) musicL4.stop();
-  if (!musicL3.isPlaying()) musicL3.loop();
-  drawPG2();
-}));
-
-  
-  buttons.push(new Button("Level 4", width / 2 + spacing, y, () => {
-    activeLevel = 4;
-    if (musicL1.isPlaying()) musicL1.stop();
-    if (musicL2.isPlaying()) musicL2.stop();
-    if (musicL3.isPlaying()) musicL3.stop();
-    if (!musicL4.isPlaying()) musicL4.loop();
-    drawPG2();
-  }));
-}
-
-let colPalette; // Custom colour palette for level 3
+let colPalette; // Custom colour palette for Level 3 Audio Visualiser
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  createCanvas(windowWidth, windowHeight); // Canvas fit window size
 
   scaleX = windowWidth / originW;
   scaleY = windowHeight / originH;
   
-  // Refer to https://p5js.org/reference/p5/createGraphics/
-  // level1 pg
+  // Off-screen buffers (Implementation uses p5.createGraphics: https://p5js.org/reference/#/p5/createGraphics)
+  // pg  – holds the clean, geometric artwork for Level 1 (mainly for lake + land)
+  // pg2 – regenerated on every Level 2-4 click (mainly for lake + land); replaces the geometry, with painterly “brush-stroke” groups
+  // level 1 pg
   pg = createGraphics(originW, originH);
   pg.clear();
 
-  // Refer to https://p5js.org/reference/p5/createGraphics/
   // level > 1 pg
   pg2 = createGraphics(originW, originH);
   pg2.clear();
 
+  // Basic typographic settings for button labels & HUD text
   textAlign(CENTER, CENTER); // text alignment center
   textSize(15); // text size
   noStroke();
-  
+
   // For audio visualiser
   fftL1 = new p5.FFT();
   fftL1.setInput(musicL1);
-  
+
   fftL2 = new p5.FFT();
   fftL2.setInput(musicL2);
 
   fftL3 = new p5.FFT(0.8, 256); //Smooth 0.8, 256 bands
   fftL3.setInput(musicL3);
   pSpacing = sqrt(width * height / pCount); // Particle grid spacing
-  
+
   fftL4 = new p5.FFT();
   fftL4.setInput(musicL4);
 
   colPalette = [
-  color('#e1be1c'),
-  color('#c35314'),
-  color('#598bac'),
-  color('#22356d'),
-  color('#69855f')
- ];
+    color('#e1be1c'),
+    color('#c35314'),
+    color('#598bac'),
+    color('#22356d'),
+    color('#69855f')
+  ];
 
-  createButtons(); //This line belongs to my group member
+  createButtons(); 
 
-  // initial level1 pg
+  // Render the static Level 1 artwork into the pg buffer
   drawPG1();
 
+  // Create an off-screen layer for the sky
   noiseGraphics = createGraphics(windowWidth, windowHeight);
   noiseGraphics.colorMode(HSB, 360, 100, 100, 255);
   noiseGraphics.background(25, 80, 30);
+
+  // Tunable flow-field + texture parameters
   rez1 = 0.006;
   rez2 = 0.003;
   gap = 15;
@@ -176,6 +150,7 @@ function setup() {
   applyPaperTexture(1);
   applyPaperTexture(0);
 
+  // Force a first layout pass so everything scales to the current window size before draw() starts looping
   windowResized();
 }
 
@@ -183,40 +158,103 @@ function setup() {
 function draw() {
   background(255);
   noStroke();
-  image(noiseGraphics, 0, 0, width, height); // Originally the noiseGraphics layer was drawn using its original width and height. However, when merged with other elements, the dimensions of the noiseGraphics layer differed from the main canvas, causing size mismatches or incorrect display. To resolve this issue, the noiseGraphics layer is explicitly scaled to match the width and height of the main canvas, ensuring consistency across the final output
+  image(noiseGraphics, 0, 0, width, height); 
 
-  // push()
-  // // canvas scale
-  // scale(scaleX, scaleY);
+  /* The original noiseGraphics layer used its default size, which caused mismatches when combined with other elements. To fix this, 
+  it is now explicitly scaled to match the main canvas dimensions, ensuring consistent and proportionate display in the final output. */
 
-  // // Draw different layer contents according to the current button state
-  // if (activeLevel <= 1) {
-  //   image(pg, 0, 0);
-  // } else if (activeLevel > 1) {
-  //   image(pg2, 0, 0);
-  // }
-  // pop();
-  // Lakes and landmasses could not be resized, so based on Chatgpt's troubleshooting advice I changed the code to the following
-
-  // Just drag the off-screen canvas to the target width and height in equal proportions.
+  // Lake & Land layer
+  // Level 1 : pg  (vector geometry)
+  // Level 2-4 : pg2 (painterly brush strokes, regenerated on click)
+  // Both buffers were created with p5.createGraphics, keep the original 1811*1280 aspect via scaleX / scaleY
   const targetW = originW * scaleX;   // scaleX = width / originW
   const targetH = originH * scaleY;   // scaleY = height / originH
   const layer   = (activeLevel <= 1) ? pg : pg2;
   image(layer, 0, 0, targetW, targetH);
 
+
+  drawBridge();
+  
+  // drawScreamCharacter() needs a label like "level 2", so this array
+  // Turns the number 1-4 into that text. Slot 0 is an empty string;
+  // When activeLevel is 0 we return nothing and avoid an error.
   if (activeLevel > 0) {
   let levelTexts = ["", "level 1", "level 2", "level 3", "level 4"];
 
+  // Move the order of the ghost character for audio visualisation so that the audio visualisation will overlaid on the ghost character
+  // Each level is a little closer to the screaming people
+  // Setting a different position for each level creates the effect of movement.
+   let ghostX = [10, 50, 100, 150]; 
+   let ghostY = [100, 150, 200, 250];
+   drawGhostCharacter(ghostX[activeLevel-1], ghostY[activeLevel-1], 0.4); 
+
+  // Draw the audio visualiser for the current level
   if (activeLevel === 1) drawL1Visualiser();
   if (activeLevel === 2) drawL2Visualiser();
   if (activeLevel === 3) drawL3Visualiser();
   if (activeLevel === 4) drawL4Visualiser();
-    
-  // Render the character
-  drawScreamCharacter(levelTexts[activeLevel]);
+
+  drawScreamCharacter(levelTexts[activeLevel]);   // draw character
   }
-  drawButtons(); 
+
+  drawButtons(); // Draw Buttons, see bottom of code; the button is always rendered last, ensuring it is above all layers
 }
+
+// Start of button drawing 
+/* Reference inspiration
+1. Strut slide editor – creates a `buttons` array with buttons.push(new Button(...)) inside createButtons()
+https://github.com/tusharvikky/Strut/blob/41c6e5359b727d55cdfb5c5f2d5789824e79d7a4/app/bundles/app/strut.slide_components/main.js#L24
+2. xaota/ui pagination component – also builds an array of buttons via buttons.push() before attaching click events
+https://github.com/xaota/ui/blob/4c7bda33feda53b75c24d3e2b7d12ee9aada4b2d/components/pagination.js#L3
+Both links use DOM buttons, not p5.js, but we borrowed the same “array + push” idea. Here each Button is a lightweight p5.js object that
+draws a rectangle on the canvas and stores a callback; every click is processed later in mousePressed(). */
+
+function createButtons() {
+  buttons = [];
+  let y = 50; // vertical position of buttons
+  let spacing = 150; // horizontal spacing between buttons
+
+  // Define Buttons
+  // Add perlin noise part
+
+  buttons.push(new Button("Level 1", width / 2 - spacing, y, () => {
+    activeLevel = 1;
+    if (!musicL1.isPlaying()) musicL1.loop();
+    if (musicL2.isPlaying()) musicL2.stop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (musicL4.isPlaying()) musicL4.stop();
+    drawPG2();
+    updateNoiseLayer(); 
+  }));
+  buttons.push(new Button("Level 2", width / 2 - spacing / 3, y, () => {
+    activeLevel = 2;
+    if (musicL1.isPlaying()) musicL1.stop();
+    if (!musicL2.isPlaying()) musicL2.loop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (musicL4.isPlaying()) musicL4.stop();
+    drawPG2();
+    updateNoiseLayer();
+  }));
+  buttons.push(new Button("Level 3", width / 2 + spacing / 3, y, () => {
+    activeLevel = 3;
+    if (musicL1.isPlaying()) musicL1.stop();
+    if (musicL2.isPlaying()) musicL2.stop();
+    if (!musicL3.isPlaying()) musicL3.loop();
+    if (musicL4.isPlaying()) musicL4.stop();
+    drawPG2();
+    updateNoiseLayer();
+  }));
+  buttons.push(new Button("Level 4", width / 2 + spacing, y, () => {
+    activeLevel = 4;
+    if (musicL1.isPlaying()) musicL1.stop();
+    if (musicL2.isPlaying()) musicL2.stop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (!musicL4.isPlaying()) musicL4.loop();
+    drawPG2();
+    updateNoiseLayer();
+  }));
+}
+// End of button drawing
 
 // Below part added for lake and land
 function drawPG1() {
@@ -227,16 +265,18 @@ function drawPG1() {
   drawLandCircles();
   drawRightCircles();
 }
-function drawPG2() {
-  pg2.clear();
-  drawWave2();
 
+// Lake & land: Base idea from OpenProcessing #1612706 (Group & BrushStroke classes): https://openprocessing.org/sketch/1612706
+function drawPG2() {
+  pg2.clear(); // reset the painterly layer each time
+  drawWave2(); // keep the dark lake outline (same as drawWave)
+  // OpenProcessing fixed minDistance=100 ; we map 180/140/100 instead.
   // Density corresponding to different levels of lake and land
   // The smaller and denser the numbers are, the more likely they are to get stuck.
-  let spaces = [180, 120, 70]
+  let spaces = [180, 140, 100] // Level 2/3/4
   groups = []
 
-  // Traverse the pixels of level1, use the pixels that meet the conditions as the center point of the group, and create a group object
+  // Traverse the pixels of level 1, use the pixels that meet the conditions as the center point of the group, and create a group object
   for (let x = 0; x < pg.width; x += spaces[activeLevel - 2]) {
     for (let y = 300; y < pg.height; y += spaces[activeLevel - 2]) {
       // Get the color value of the current pixel
@@ -254,82 +294,16 @@ function drawPG2() {
   }
 }
 
-// This part of the code draws buttons of different colors depending on the currently activated button state. Use fill() to set the fill color, noStroke() to remove the border, rect() to draw a rounded rectangle, and text() to display the button label.
-// Reference: p5.js official documentation on fill(), noStroke(), rect(), and text().
-function drawButtons() {
-  let scaleX = windowWidth / originW;
-  let scaleY = windowHeight / originH;
 
-  for (let btn of buttons) {
-    let bx = btn.x * scaleX;
-    let by = btn.y * scaleY;
-    let bw = btnWidth * scaleX;
-    let bh = btnHeight * scaleY;
-    let br = btnRadius * scaleX;
+// Start of Lake and Land drawing
+  // Path originally drawn in Adobe Illustrator, then exported as <path> data in an SVG file.
+  // The SVG path was converted to p5.js code with the online tool “svg2p5” (https://svg2p5.com) which outputs beginShape() + vertex() + bezierVertex() commands
+  // Manual tweaks after conversion:
+  // 1. Replaced generic canvas calls with pg./pg2. to draw into the levels buffer instead of the main canvas
+  // 2. Unified fill colour to match the artwork palette
+  // 3. Added explicit CLOSE flag at endShape() for a sealed outline
+  // Result: Adobe Illustrator vector -> SVG -> svg2p5 code -> Integration code
 
-    // Refer to: https://p5js.org/examples/input-rollover.html
-    // Highlight the active button after click
-    fill(btn.level === activeLevel ? color(209, 99, 0) : color(248, 208, 19));
-    noStroke();
-    rect(bx, by, bw, bh, br);
-
-    fill(0);
-    text(btn.label, bx + bw / 2, by + bh / 2);
-  }
-}
-
-// This code implements the function of updating activeLevel when the mouse clicks the button
-function mousePressed() {
-  for (let b of buttons) {
-    if (b.clicked(mouseX, mouseY)) {
-      b.action();
-    }
-  }
-}
-
-// function windowResized() {
-//   resizeCanvas(windowWidth, windowHeight);
-//   createButtons(); // Recalculate button positions
-// }
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  createButtons(); 
-  
-  scaleX = windowWidth / originW;
-  scaleY = windowHeight / originH;
-
-  pSpacing = sqrt(width * height / pCount);
-  noiseGraphics = createGraphics(windowWidth, windowHeight);
-  noiseGraphics.colorMode(HSB, 360, 100, 100, 255);
-  noiseGraphics.background(25, 80, 30);
-  noiseGraphics.strokeCap(SQUARE);
-  drawNoiseLines();
-  applyPaperTexture(1);
-  applyPaperTexture(0);
-}
-
-
-
-// function draw() {
-  
-
-//   // Draw Background Elements
-//   drawWave();
-//   drawLayerBottom();
-//   drawSeaSunlight();
-//   drawBubbleland();
-//   drawLandCircles();
-//   drawRightCircles();
-
-//   // Draw character
-//   drawScreamCharacter(currentExpression);
-
-//   // Draw buttons
-//   drawButtons();
-// }
-
-// Lake and land part
 function drawWave() {
   pg.noStroke();
 
@@ -426,79 +400,96 @@ function drawRightCircles() {
   pg.fill(86, 91, 111); pg.circle(1399.86, 568.86, 74.85 * 2);
 }
 
-// Refer to: https://openprocessing.org/sketch/1725734
+
+// Level 3 auidio visualiser: Fear out of control – sanity has shattered into countless drifting dots
+
+/* Implementation reference: https://openprocessing.org/sketch/1725734
+Changes:
+• Still use two particle grids, offset by ½ pSpacing, but:
+1. Colour source switched from ‘HSB hue shift’ to direct lookup in colPalette.
+2. strokeWeight is mapped with map(e, 0-1, 1-8) so line thickness grows with audio energy.
+3. Draw bass and mid on separate passes, creating a foreground / background flicker effect.
+• pOffset += pSpeed keeps the original author’s rotation accumulator. */
+// Please notice: Audio-FFT drives everything here; Perlin noise is kept solely because the reference (#1725734) used a flow-field—this sketch is NOT Perlin-noise-centric
+
 function drawL3Visualiser() {
   fftL3.analyze(); // Update spectrum
 
-  // Bass
-  // let e = map(fft.getEnergy('bass'), bass.low, bass.high, 0, 100, true);
-  // push();
-  // colorMode(HSB, 360, 100, 100, 255);
-  // stroke(e + bass.hueShift, e, 100, 128);
-  // strokeWeight(e / 8);
   //Bass changed colors based on preset:
   let e = map(fftL3.getEnergy('bass'), bass.low, bass.high, 0, 1, true); // 0-1
-let bassIdx = floor(e * (colPalette.length - 1));                    // 0-4
-stroke(colPalette[bassIdx]);
-strokeWeight( map(e,0,1,1,8) );
+  let bassIdx = floor(e * (colPalette.length - 1)); // 0-4
+
+  push();
+  stroke(colPalette[bassIdx]);
+  strokeWeight(map(e, 0, 1, 1, 8));
 
   for (let x = 0; x < width; x += pSpacing) {
     for (let y = 0; y < height; y += pSpacing) {
-      let a = 4 * noise(x / 300, y / 300) * TWO_PI + pOffset;
+      const a = 4 * noise(x / 300, y / 300) * TWO_PI + pOffset;
       point(x + 100 * cos(a), y + 100 * sin(a));
     }
   }
-  pop();
 
-  // Midrange Layer
-  // e = map(fft.getEnergy('mid'), mid.low, mid.high, 0, 100, true);
-  // push();
-  // colorMode(HSB, 360, 100, 100, 255);
-  // stroke(e + mid.hueShift, e, 100, 128);
-  // strokeWeight(e / 8);
   // Midrange changed colors based on preset:
   e = map(fftL3.getEnergy('mid'), mid.low, mid.high, 0, 1, true);
-let midIdx = colPalette.length - 1 - floor(e * (colPalette.length - 1));
-stroke(colPalette[midIdx]);
-strokeWeight( map(e,0,1,1,8) );
+  let midIdx = colPalette.length - 1 - floor(e * (colPalette.length - 1));
+  stroke(colPalette[midIdx]);
+  strokeWeight(map(e, 0, 1, 1, 8));
 
   for (let x = pSpacing / 2; x < width; x += pSpacing) {
     for (let y = pSpacing / 2; y < height; y += pSpacing) {
       let a = 4 * noise(x / 300, y / 300) * TWO_PI + pOffset;
+      // Please notice: Audio-FFT drives everything here; Perlin noise is kept solely because the reference (#1725734) used a flow-field—this sketch is NOT Perlin-noise-centric
       point(x + 100 * cos(a), y + 100 * sin(a));
     }
   }
   pop();
 
+  // Let character's stroke flashing (canceled)
+  stroke(colPalette[midIdx]);
+  strokeWeight(map(e, 0, 1, 1, 8));
+
   pOffset += pSpeed; // Rotation increment
 }
 
-// Level 1 auidio visualiser, refer to: https://openprocessing.org/sketch/728232
-function drawL1Visualiser() {
-  // analyse spectrum
-  fftL1.analyze();
-  const amp = fftL1.getEnergy('mid');       // 0-255
 
-  // map amplitude to vertical range
-  const maxA = (height / 2) - 100;
-  const A    = map(amp, 0, 255, 10, maxA);
+// Level 1 auidio visualiser: Nervous emotions - Single Line & Dots
+
+/* Implementation reference: https://openprocessing.org/sketch/728232
+https://editor.p5js.org/codingtrain/sketches/IYB_UgWab
+Take the Coding Train template for audio analysis, drop it into the purely-visual openprocessing #728232 sketch, then replace hard-coded numbers with amp-driven mappings, to fuse motion with sound
+
+Changes:
+1. Fix the center line of the sine function to the center line of the canvas: translate(0, height/2)
+2. Phase l1Phase is mapped from 0-255 intermediate frequency energy to 0.01-0.1, speeding up/slowing down the curve scrolling speed instead of directly taking the frame number.
+3. Point color is changed from random palette to FFT energy index l1Palette (echoing the lake&land colors). */
+
+function drawL1Visualiser() {
+  // Analyse spectrum
+  fftL1.analyze();
+  const amp = fftL1.getEnergy('mid'); // Mid-band loudness, 0‒255
+
+  // Map amplitude to vertical range
+  const maxA = (height / 2) - 100; // Never touch top/bottom edge
+  const A = map(amp, 0, 255, 10, maxA); // Quiet = 10 px ripple, loud = maxA
 
   // pick a palette colour that changes with the beat
-  const colIdx = floor( map(amp, 0, 255, 0, l1Palette.length) ) % l1Palette.length;
+  const colIdx = floor(map(amp, 0, 255, 0, l1Palette.length)) % l1Palette.length; // Wrap-around safety
   stroke(l1Palette[colIdx]);
-  fill(l1Palette[colIdx] + '50');            // translucent fill for dots
+  fill(l1Palette[colIdx] + '50'); // 50 hex =  ~30 % alpha for dots
 
-  noFill();                 // line – uncomment to draw the ribbon itself
+  noFill();
   strokeWeight(2);
 
+  // Draw the ribbon+beating dots
   push();
-  translate(0, height / 2); // baseline at mid-screen
+  translate(0, height / 2);  // Put x axis in the middle
 
   beginShape();
-  for (let x = 0; x < width; x += 4) {
-    const y = A * sin(l1Phase - x * 0.02);
+  for (let x = 0; x < width; x += 4) { // 1 vertex every 4 px
+    const y = A * sin(l1Phase - x * 0.02); // Phase-shift gives scroll effect
     vertex(x, y);
-    // pulsating dots
+    // Pulsating dots: every 40 px place a dot whose radius also breathes with the beat
     if (x % 40 === 0) {
       const d = 8 * sin((l1Phase + x) * 0.05);
       ellipse(x, y, d, d);
@@ -508,17 +499,24 @@ function drawL1Visualiser() {
 
   pop();
 
-  // advance phase – speed proportional to music energy
+  // Advance phase – speed proportional to music energy
+  // Map() gives a speed range 0.01‒0.1 rad/frame  (was fixed 0.03 in #728232)
   l1Phase += map(amp, 0, 255, 0.01, 0.1);
 }
 
 
+// Level 4 auidio visualiser: Extreme Chaos - Dense dots and rectangles, rotating rapidly to fast-paced music
 
+/* Implementation reference: https://openprocessing.org/sketch/2237575/
+Changes:
+1. Palette is changed to l4Palette, corresponding to lake&land colors.
+2. Randomly adjust eSize every two seconds (frameCount%120) -> grid density twitches.
+3. valMapped ∈ {0,1,2} → three shapes (hollow circle/solid circle/rounded rectangle) switch with the drum beats; the source sketch has only one geometric shape. */
 
-//Level 4 audio visualiser, refer to: https://openprocessing.org/sketch/2237575/
 function drawL4Visualiser() {
   // get FFT spectrum
   const spectrum = fftL4.analyze();
+
   // prepare to draw the grid around canvas center
   push();
   translate(width / 2, height / 2);
@@ -526,6 +524,9 @@ function drawL4Visualiser() {
 
   const step = eSize;
   let idx = 0;
+
+  let val = fftL4.getEnergy('mid');
+  let valMapped = floor(map(val, 50, 180, 0, 3, true));
 
   for (let x = -width / 2; x <= width / 2; x += step) {
     for (let y = -height / 2; y <= height / 2; y += step) {
@@ -538,15 +539,21 @@ function drawL4Visualiser() {
 
       rotate(sx + sy); // rotation driven by audio
 
-      // filled square
-      noStroke();
-      fill(l4Palette[int(random(l4Palette.length))] + 'BB');
-      rect(x, y, sideA, sideA, 10 * abs(sin(frameCount * 0.002)));
-
-      // stroked square
-      stroke(l4Palette[idx++ % l4Palette.length]);
-      noFill();
-      rect(x + step / 2, y + step / 2, sideB, sideB, 10 * abs(cos(frameCount * 0.002)));
+      // 0=wire-circle, 1=solid-circle, 2=rounded-rect
+      if (valMapped == 0) {
+        stroke(l4Palette[idx++ % l4Palette.length]);
+        strokeWeight(3);
+        noFill();
+        ellipse(x, y, sideA, sideA);
+      } else if (valMapped == 1) {
+        noStroke();
+        fill(l4Palette[int(random(l4Palette.length))] + 'BB');
+        ellipse(x, y, sideA, sideA);
+      } else if (valMapped == 2) {
+        noStroke();
+        fill(l4Palette[int(random(l4Palette.length))] + 'BB');
+        rect(x, y, sideA, sideA, 10 * abs(cos(frameCount * 0.002)));
+      }
     }
   }
 
@@ -555,86 +562,22 @@ function drawL4Visualiser() {
   // change grid size and stroke weight every two seconds
   if (frameCount % 120 === 0) {
     eSize = random(30, 100);
-    strokeWeight(random(5, 20));
+    // strokeWeight(random(5, 20));
   }
 }
 
-// function drawL4Visualiser() {
-//   // Update FFT
-//   let spectrum = fftL4.analyze();
 
-//   // Clipping within Wave2 outline
-//   push();
-//   drawingContext.save();
-//   noStroke();
-//   noFill();
-//   beginShape();
-//   // Copy the 13 vertices/beziers of drawWave2 (only change to vertex/bez, no fill)
-//   vertex(1351.35*scaleX,388.26*scaleY);
-//   bezierVertex((1351.35-286.45)*scaleX,(388.26+127.97)*scaleY,
-//                (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY,
-//                (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY);
-//   bezierVertex(320.13*scaleX,251*scaleY,0,625.71*scaleY,0,625.71*scaleY);
-//   vertex(0,1280*scaleY);
-//   vertex(1811*scaleX,1280*scaleY);
-//   vertex(1811*scaleX,429.84*scaleY);
-//   bezierVertex((1811-114.81)*scaleX,(429.84-206.71)*scaleY,
-//                (1811-459.65)*scaleX,(429.84-41.58)*scaleY,
-//                (1811-459.65)*scaleX,(429.84-41.58)*scaleY);
-//   endShape(CLOSE);
+// Level 2 auidio visualiser: Tension increases - emotions change from lines to dots and increase in number, gradually creating confusion
 
-//   // Draw a rectangular grid
-//   let idx = 0;
-//   let step = eSize;
-//   translate(width/2, height/2);
-//   for (let x=-width/2; x<=width/2; x+=step) {
-//     for (let y=-height/2; y<=height/2; y+=step) {
-      
-//     drawingContext.clip();           // Key: Paint only on the water surface area
+/* Implementation reference: https://openprocessing.org/sketch/967789
+https://editor.p5js.org/codingtrain/sketches/IYB_UgWab Daniel Shiffman’s Coding Train FFT demo (p5.js Web Editor), which shows how to analyse live audio with p5.FFT and drive graphics with getEnergy() values.
+Changes:
+1. Read getEnergy('mid') only, so motion locks to the mid-range drum beats in Winter; if the track is paused the amplitude stays at 0.
+2. Cover each frame with a layer of semi-transparent black with 20 alpha for a slight afterimage to avoid persistent smearing.
+3. Every vertical column keeps a fixed base colour that gradually shifts with the amplitude, creating a rhythmic flicker.
+4. Side-to-side wobble is produced by three phase-shifted sine waves (ratio1, ratio2, noiseRatio), while pOffset += pSpeed retains the original author’s slow rotational drift and ties the whole field together. */
 
-
-//       // Map x / y to spectrum index (0~512)
-//       let sx = spectrum[int(map(x, -width/2, width/2, 0, 512)) % 128]*0.01;
-//       let sy = spectrum[int(map(y, -height/2, height/2, 0, 512)) % 128]*0.01;
-
-//       rotate(sx+sy);
-
-//       // Filled Rectangle
-//       fill(l4Palette[int(random(l4Palette.length))] + 'BA');
-//       rect(
-//         x*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
-//         y*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
-//         abs(step*0.5*sy*cos(y*frameCount*0.0001)),
-//         abs(step*0.5*sy*cos(y*frameCount*0.0001)),
-//         10*abs(sin(frameCount*0.001))
-//       );
-
-//       // Stroke rectangle
-//       stroke(l4Palette[idx % l4Palette.length]);
-//       rect(
-//         x*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
-//         y*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
-//         abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
-//         abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
-//         10*abs(cos(frameCount*0.001))
-//       );
-//       idx++;
-//     }
-//   }
-
-//   // Randomly change size/stroke every two seconds
-//   if (frameCount % 120 === 0) {
-//       eSize = random(30,100);
-//   }
-
-//   drawingContext.restore();
-//   pop();
-// }
-
-
-//Level 2 audio visualiser
-// Overall effect refer to: https://openprocessing.org/sketch/967789
-function drawL2Visualiser () {
+function drawL2Visualiser() {
 
   /* 0) Spectrum analysis; if the audio isn’t playing, amp will stay at 0 */
   fftL2.analyze();
@@ -647,45 +590,68 @@ function drawL2Visualiser () {
   rect(0, 0, width, height);
   pop();
 
-  /* 2) Calculate amplitude and match colors */
-  const Amax   = (height / 2) - 80;
-  const swingA = map(amp, 0, 255, 15, Amax); // Vertical swing
-  const baseIdx= floor(map(amp, 0, 255, 0, l2Palette.length)) %
-                 l2Palette.length;
+  /* 2) Map energy -> vertical swing & palette index
+  swingA   : vertical swing range
+  baseIdx  : which colour in l2Palette should lead */
+  const swingA = map(amp, 0, 255, 15, (height / 2 - 80) * 1.7);
+  const baseIdx = floor(map(amp, 0, 255, 0, l2Palette.length, true));
 
-  /* 3) Draw Strips */
+  /* 3)  Draw vertical dot columns 
+     • Canvas is re-centred so (0,0) = middle of screen
+     • Two phase-shifted sine waves give left-right wobble
+     • TempoFactor (derived from amp) makes them wiggle faster when the music is louder */
   push();
   translate(width / 2, height / 2);
-  noStroke();
   colorMode(HSB);
+  noStroke();
 
-  const halfSpan = width / 5;
-  for (let i = -halfSpan; i < halfSpan; i += 10) {
+  const halfSpan = width; // Draw full width
+  let colIndex = 0;
+  const tempoFactor = map(amp, 0, 255, 0.5, 1.5);   // Faster when louder
 
-    const delta      = map(i, -halfSpan, halfSpan, 0, 10);
-    const noiseParam = map(amp, 0, 255, 0, 3); // Driving noise with volume
-    const ratio1     = sin(frameCount / 20 + delta);
-    const ratio2     = sin(frameCount / 30 + delta * 2);
-    const noiseRatio = sin(frameCount / 20 + delta * noiseParam);
+  for (let i = -halfSpan; i < halfSpan; i += 10) { // One column / 10px
+    const delta = map(i, -halfSpan, halfSpan, 0, 10); // Minor phase
+    const phaseA = frameCount * 0.05 * tempoFactor + delta; // Sine #1
+    const phaseB = frameCount * 0.033 * tempoFactor + delta * 2; // Sine #2
 
-    // Select a color for the same column
-    const col = l2Palette[(baseIdx + floor(i / 10)) % l2Palette.length];
-    fill(col);
+    // Set colour for this column (cyclic through palette)
+    fill(l2Palette[(baseIdx + colIndex) % l2Palette.length]);
 
-    for (let o = -100; o < 100; o += 30) {
+    // Build the column: many small dots along the y axis
+    for (let o = -100; o <= 100; o += 30) {
       const x = i + o / 5;
-      const y = (ratio1 + ratio2 + noiseRatio) * swingA / 10 + o;
-      const d = 10 - (o + 100) / 20;
+      const y = (sin(phaseA) + sin(phaseB)) * swingA / 10 + o;
+      const d = 11 - (o + 100) / 20; // Dot diameter: 11 and 20
       circle(x, y, d);
     }
+    colIndex++; // Next column
   }
   pop();
-  
   colorMode(RGB);
 }
 
 
+
 // Define a Group class to represent a group of shapes
+/* Group & BrushStroke  –  adapted from OpenProcessing sketch #1612706: https://openprocessing.org/sketch/1612706
+HOW THIS VERSION DIFFERS FROM THE ORIGINAL
+1.  Colour source  
+• Original: chose random colours from a fixed palette.  
+• Changes: passes in ‘c’ sampled from pg.get(x,y), so every stroke inherits the exact lake / land colour underneath.
+2.  Placement logic  
+• Original: Group centres are generated by Poisson-Disk sampling.  
+• Changes: Groups are placed on a regular grid over pg; we only create a Group if that pixel belongs to the lake/land 
+(alpha>0 and not background navy).  Grid step comes from spaces[] to give different densities for Level 2-4.
+3.  Drawing surface  
+• Original: strokes are drawn directly on the main canvas.  
+• Ours: strokes are rendered into pg2 (an off-screen buffer) so we can toggle the whole layer with activeLevel.
+4.  Parameter tweaks  
+• shapeWidth 20-50 px  (was 50-200 px) to fit our smaller scale.  
+• shapeHeight 1-3 px   (was 1-6 px) for a finer brush feel.  
+• groupRad random(120,125) and density 0.002 kept the same.
+Aside from these edits, the polar distribution in Group.prepare() and the curved “capsule” outline in BrushStroke.show() follow the original
+algorithm almost line-for-line, preserving its painterly aesthetic.*/
+
 class Group {
   constructor(x, y, c) {
     // Coordinates of the center point
@@ -765,29 +731,132 @@ class BrushStroke {
     pg2.endShape()
     pg2.pop()
   }
+}  // End of Lake and Land drawing
+
+//draw bridge
+//I just tried adding and subtracting different distances and looking at the positional effects to adjust the slope a little bit.
+function drawBridge() {
+  noStroke(); 
+  fill(139, 69, 19); // brown
+
+  // Drawing a ‘wide’ bridge with a quadrilateral
+  let x1 = 0;
+  let y1 = height / 2; // left up
+
+  let x2 = 0;
+  let y2 = height; // left down
+
+  let x3 = width / 2;
+  let y3 = height;  // right down
+
+  let x4 = width / 10;
+  let y4 = height /2; // right up
+
+  quad(x1, y1, x2, y2, x3, y3, x4, y4); // color the bridge
+
+  //railings   
+  //The angle and start point of the slant line are manually and repeatedly adjusted data
+
+  stroke(101, 67, 33); // brown
+  strokeWeight(10);
+
+  line(x1 , y1-20 , x4+5 , y4-20); 
+  line(x4+5 , y4-20 , x3+50 , y3)
+
+  stroke(193, 154, 107,70); // light brown
+  strokeWeight(10);
+  line(x1 , y1+20 , x2+150 , y2); 
+  line(x1+70 , y1+60 , x2+250 , y2); 
+
+    stroke(75, 54, 33,100); // dark brown
+  strokeWeight(8);
+  line(x1 , y1+120 , x2+80 , y2); 
+  line(x1+80 , y1+30 , x2+350 , y2); 
+
+
+}
+
+//ghost character  
+//To make custom shapes, I traced the reference image in Adobe Illustrator and exported it as an SVG vector. 
+//I then opened the SVG file in VS Code to access the path data, which I converted into p5.js code 
+//using ChatGPT and the svg2p5.com converter. 
+
+//chat GPT links:  https://chatgpt.com/share/684a6dbd-bae4-8003-b2d5-6f8f3033412e
+//tutorial on youtube links:  https://www.youtube.com/watch?v=BATJDnUsTiU
+
+
+function drawGhostCharacter(x = 200, y = 600, scaleVal = 1) {
+  push();
+  translate(x, y);
+  scale(scaleVal);
+
+  // black body with white stroke
+  fill(0);
+  stroke(255);
+  strokeWeight(1);
+  beginShape();
+  vertex(160.16, 787.79);
+  bezierVertex(173.49, 754.28, 176.56, 729.45, 176.56, 729.45);
+  bezierVertex(179.64, 704.62, 181.17, 668.01, 181.69, 636.36);
+  bezierVertex(182.2, 604.71, 188.87, 520.31, 205.27, 491.14);
+  bezierVertex(221.67, 461.97, 227.31, 450.18, 255.51, 455.15);
+  bezierVertex(283.71, 460.12, 293.96, 469.42, 294.47, 487.42);
+  bezierVertex(294.98, 505.42, 307.8, 559.41, 307.28, 596.64);
+  bezierVertex(306.77, 633.88, 289.35, 671.73, 290.38, 705.86);
+  bezierVertex(291.41, 740, 319.6, 781.58, 330.36, 787.79);
+  bezierVertex(341.12, 794, 306.78, 813.85, 281.15, 808.89);
+  bezierVertex(255.52, 803.93, 229.38, 803.64, 208.36, 809.68);
+  bezierVertex(187.34, 815.72, 175.02, 804.55, 160.16, 787.79);
+  endShape(CLOSE);
+
+  // white face mask
+  noStroke();
+  fill(255);
+  beginShape();
+  vertex(232.51, 479.62);
+  bezierVertex(242.34, 467.33, 269.26, 469.1, 277.6, 494.42);
+  bezierVertex(283.67, 512.85, 280.22, 528.49, 278.65, 541.61);
+  bezierVertex(276.76, 557.4, 263.71, 577.35, 244.3, 572.6);
+  bezierVertex(225.81, 568.08, 223.86, 556.4, 221.5, 540.77);
+  bezierVertex(217.57, 514.69, 222.68, 491.9, 232.51, 479.62);
+  endShape(CLOSE);
+
+  // eyes,mouth...  black
+  fill(0)
+  ellipse(238.04, 508.01, 8.13 * 2, 3.81 * 2);
+  ellipse(239.08, 494.61, 1.56 * 2, 7.27 * 2);
+  ellipse(267.89, 497.15, 1.56 * 2, 7.27 * 2);
+  ellipse(236.99, 521.41, 1.56 * 2, 7.27 * 2);
+  ellipse(266.84, 525.13, 1.56 * 2, 7.27 * 2);
+  ellipse(266.84, 510.55, 8.13 * 2, 3.81 * 2);
+  ellipse(249.37, 549.05, 7.87 * 2, 11.53 * 2);
+  pop();
 }
 
 
+/* Character
+To make custom shapes, I traced the reference image in Adobe Illustrator and exported it as an SVG vector. 
+I then opened the SVG file in VS Code to access the path data, which I converted into p5.js code 
+using ChatGPT and the svg2p5.com converter. 
 
+ChatGPT Links: 
+https://chatgpt.com/share/68441ed9-aadc-800a-973f-e1387b4b74cc
+https://chatgpt.com/share/68441f02-1634-800a-8e9f-7963758f5023
+https://chatgpt.com/share/68441f26-1460-800a-926a-effebb2238c6 */
 
-
-
-
-
-// Character
-function drawScreamCharacter(expression) {
-  push();
-  noStroke();
-  translate(width / 3, height / 3);
-  scale(0.8); // Scale down the character for better visibility
+function drawScreamCharacter(expression) {   // Start of character drawing
+  push();   // Save current drawing style and transform state, keeps shape in place
+  translate(width / 3, height / 3);   // Shrink character to fit screen
+  scale(0.8);   // Scale down the character for better visibility
 
   //Body
-  push();
-  beginShape();
+  push(); // Save current drawing style and transform state, keeps shape in place
+  noStroke();
+  beginShape(); // Start of custom shape
   fill('#4a4b4c');
   // Starting point
-  vertex(219.56, 283.215);
-  bezierVertex(161.235, 285.11, 142.937, 326.477, 142.937, 326.477);
+  vertex(219.56, 283.215); // Add vertices to specify the corner points of a custom shape. Tecnique ref: https://p5js.org/reference/p5/vertex/ 
+  bezierVertex(161.235, 285.11, 142.937, 326.477, 142.937, 326.477); // Curves are drawn by adding curved segments to custom shapes. Technique ref: https://p5js.org/reference/p5/bezierVertex/ 
   bezierVertex(142.937, 326.477, 131.807, 398.212, 131.807, 398.212);
   bezierVertex(131.807, 398.212, 153.263, 531.879, 123.641, 603.675);
   bezierVertex(86.829, 692.899, 75.15, 841.89, 75.15, 841.89);
@@ -797,24 +866,24 @@ function drawScreamCharacter(expression) {
   vertex(431.177, 356.817);
   bezierVertex(440.094, 305.459, 396.782, 306.213, 396.782, 306.213);
   vertex(219.56, 283.215);
-  endShape(CLOSE);
-  pop();
+  endShape(CLOSE); // End of custom shape
+  pop(); // Restore the previous drawing state
 
   //Left Arm
   push();
   fill('#231f20');
   stroke('#231f20');
   strokeWeight(6);
-  beginShape();
+  beginShape(); // Start of custom shape
   // Starting point
-  vertex(211.545, 313.387);
-  bezierVertex(194.578, 377.035, 161.081, 408.672, 161.081, 408.672);
+  vertex(211.545, 313.387); // Add vertices
+  bezierVertex(194.578, 377.035, 161.081, 408.672, 161.081, 408.672); // Add a curved segment
   bezierVertex(110.591, 504.957, 94.983, 572.776, 111.983, 626.02);
   bezierVertex(129.061, 679.87, 170.607, 661.739, 185.081, 635.424);
   bezierVertex(199.555, 609.109, 227.349, 565.018, 253.587, 470.564);
   bezierVertex(279.825, 376.11, 278.494, 329.459, 278.494, 329.459);
   bezierVertex(278.494, 329.459, 265.664, 282.703, 235.501, 316.298);
-  endShape(CLOSE);
+  endShape(CLOSE); // Start of custom shape
   pop();
 
   //Right Arm
@@ -824,8 +893,8 @@ function drawScreamCharacter(expression) {
   strokeWeight(6);
   beginShape();
   // Starting point
-  vertex(442.677, 289.429);
-  bezierVertex(454.049, 289.429, 462.203, 300.443, 458.824, 311.301);
+  vertex(442.677, 289.429); // Add vertices
+  bezierVertex(454.049, 289.429, 462.203, 300.443, 458.824, 311.301); // Add a curved segment
   bezierVertex(452.597, 331.308, 445.033, 361.594, 446.453, 387.167);
   bezierVertex(448.808, 429.559, 467.459, 610.129, 405.95, 639.371);
   bezierVertex(405.95, 639.371, 395.692, 645.241, 377.59, 646.093);
@@ -835,7 +904,7 @@ function drawScreamCharacter(expression) {
   bezierVertex(398.234, 379.838, 398.043, 378.086, 398.148, 376.329);
   bezierVertex(398.786, 365.618, 402.948, 326.224, 430.018, 295.127);
   bezierVertex(433.196, 291.477, 437.837, 289.429, 442.677, 289.429);
-  endShape(CLOSE);
+  endShape(CLOSE); // End of custom shape
   pop();
 
   //Right Hand
@@ -921,14 +990,18 @@ function drawScreamCharacter(expression) {
   endShape();
   pop();
 
-  //Interactive Mouth 
+  /* Interactive Mouth 
+  Mouth size change upon each button click */
+  push(); // Save current drawing style and transform state, keeps shape in place
   fill(169, 146, 109)
   stroke(0)
   strokeWeight(6)
-  if (expression === 'level 1') {
+  let q = mousePressed ? 3 : 0; // Jitter amount (quiver strength)
+
+  if (expression === 'level 1') { // 'level 1' button clicked
     //Mouth S
     fill(169, 146, 109)
-    // stroke(0)
+    stroke(0)
     strokeWeight(6)
     beginShape();
     vertex(354.706, 297.443);
@@ -938,7 +1011,7 @@ function drawScreamCharacter(expression) {
     bezierVertex(351.509, 307.632, 352.774, 301.245, 354.706, 297.443);
     endShape();
   }
-  else if (expression === 'level 2') {
+  else if (expression === 'level 2') { // 'level 2' button clicked
     //Mouth M
     fill(169, 146, 109)
     stroke(0)
@@ -952,7 +1025,7 @@ function drawScreamCharacter(expression) {
     bezierVertex(359.965, 323.277, 361.803, 314.181, 364.61199999999997, 308.766);
     endShape();
   }
-  else if (expression === 'level 3') {
+  else if (expression === 'level 3') { // 'level 3' button clicked
     //Mouth L
     fill(169, 146, 109)
     stroke(0)
@@ -966,24 +1039,49 @@ function drawScreamCharacter(expression) {
     bezierVertex(360.871, 337.94399999999996, 362.85900000000004, 326.55999999999995, 365.897, 319.784);
     endShape();
   }
-  else if (expression === 'level 4') {
-    //Mouth XL
-    fill(169, 146, 109)
-    stroke(0)
-    strokeWeight(6)
+  else if (expression === 'level 4') {  // 'level 4' button clicked
+    /* Mouth XL — with quiver on click
+    Reference technique:
+    https://p5js.org/examples/calculating-values-random/ 
+    Lines jitter randomly with q value to simulate a quivering mouth. */
     beginShape();
-    vertex(364.399, 332.493);
-    bezierVertex(368.739, 324.013, 375.142, 301.543, 376.357, 292.13);
-    bezierVertex(390.439, 182.973, 264.752, 226.11399999999998, 289.869, 373.671);
-    bezierVertex(292.281, 387.84, 271.93, 437.821, 306.56100000000004, 418.423);
-    bezierVertex(317.439, 412.33, 324.06100000000004, 407.319, 335.264, 384.368);
-    bezierVertex(342.704, 369.126, 342.788, 367.185, 346.478, 362.086);
-    bezierVertex(354.184, 351.43600000000004, 360.157, 340.78200000000004, 364.399, 332.493);
+    vertex(364.399 + random(-q, q), 332.493 + random(-q, q)); 
+    bezierVertex(
+      368.739 + random(-q, q), 324.013 + random(-q, q),
+      375.142 + random(-q, q), 301.543 + random(-q, q),
+      376.357 + random(-q, q), 292.13 + random(-q, q)
+    );
+    bezierVertex(
+      390.439 + random(-q, q), 182.973 + random(-q, q),
+      264.752 + random(-q, q), 226.114 + random(-q, q),
+      289.869 + random(-q, q), 373.671 + random(-q, q)
+    );
+    bezierVertex(
+      292.281 + random(-q, q), 387.84 + random(-q, q),
+      271.93 + random(-q, q), 437.821 + random(-q, q),
+      306.561 + random(-q, q), 418.423 + random(-q, q)
+    );
+    bezierVertex(
+      317.439 + random(-q, q), 412.33 + random(-q, q),
+      324.061 + random(-q, q), 407.319 + random(-q, q),
+      335.264 + random(-q, q), 384.368 + random(-q, q)
+    );
+    bezierVertex(
+      342.704 + random(-q, q), 369.126 + random(-q, q),
+      342.788 + random(-q, q), 367.185 + random(-q, q),
+      346.478 + random(-q, q), 362.086 + random(-q, q)
+    );
+    bezierVertex(
+      354.184 + random(-q, q), 351.436 + random(-q, q),
+      360.157 + random(-q, q), 340.782 + random(-q, q),
+      364.399 + random(-q, q), 332.493 + random(-q, q)
+    );
     endShape();
   }
+  pop();
 
-  //Right Eye
-  push();
+  //Right Eye 
+  push(); 
   fill("#ffffff")
   noStroke()
   beginShape();
@@ -1081,6 +1179,7 @@ function drawScreamCharacter(expression) {
   // Left Nostril
   push();
   fill("#231f20")
+  noStroke() // Changes made for audio visalisation, otherwise the border will always change color
   beginShape();
   vertex(318.629, 204.211);
   bezierVertex(319.47200000000004, 203.34300000000002, 320.35, 202.514, 321.24800000000005, 201.704);
@@ -1094,6 +1193,7 @@ function drawScreamCharacter(expression) {
   //Right Nostril
   push();
   fill("#231f20")
+  noStroke() // Changes made for audio visalisation, otherwise the border will always change color
   beginShape();
   vertex(344.744, 193.793);
   bezierVertex(344.56, 193.61, 344.357, 193.441, 344.14700000000005, 193.288);
@@ -1104,83 +1204,66 @@ function drawScreamCharacter(expression) {
   endShape();
   pop();
 
-  pop(); // End of character drawing
+  pop(); // End of character drawing *********************************
 }
 
-// Button class
-class Button {
-  constructor(label, x, y, action) {
-    this.label = label;
-    this.x = x;
-    this.y = y;
-    this.w = 80;
-    this.h = 30;
-    this.action = action;
-  }
-  isHovered() {
-    return mouseX > this.x && mouseX < this.x + this.w &&
-      mouseY > this.y && mouseY < this.y + this.h;
-  }
 
-  show() {
-    if (this.isHovered()) {
-      fill(209, 99, 0); //Hover Color
-    } else {
-      fill(248, 208, 19); //Default Color
-    }
-    noStroke();
-    rect(this.x, this.y, this.w, this.h, 5);
-    textSize(17);
-    fill(0);
-    text(this.label, this.x + this.w / 2, this.y + this.h / 2);
-  }
-
-  clicked(mx, my) {
-    return mx > this.x && mx < this.x + this.w && my > this.y && my < this.y + this.h;
-  }
-}
-
-function drawButtons() {
-  for (let b of buttons) {
-    b.show();
-  }
-}
-
-function mousePressed() {
-  for (let b of buttons) {
-    if (b.clicked(mouseX, mouseY)) {
-      b.action();
-    }
-  }
-}
-
+// Start of Sky Drawing
 function drawNoiseLines() {
   for (let x = -20; x < width + 20; x += gap) {
     for (let y = -20; y < height + 20; y += gap) {
       let colorNoise = noise(x * rez2, y * rez2);
+
+      // This is the original color of Perlin noise (Level 1)
       let hue;
       if (colorNoise < 0.3) hue = map(colorNoise, 0, 0.3, 210, 220);
       else if (colorNoise < 0.7) hue = map(colorNoise, 0.3, 0.7, 30, 50);
       else hue = map(colorNoise, 0.7, 1, 20, 30);
-
       let saturation = map(colorNoise, 0, 1, 70, 90);
       let brightness = map(colorNoise, 0, 1, 20, 80);
-      noiseGraphics.stroke(hue, saturation, brightness, 160 + random(-30, 30));
+      let strokeAlpha = 160 + random(-30, 30);
+      noiseGraphics.stroke(hue, saturation, brightness, strokeAlpha);
 
-      let currentX = x + random(-startVary, startVary);
-      let currentY = y + random(-startVary, startVary);
+      let varyAmountArr = [5, 10, 25, 30];
+      let lenAmountArr = [8, 10, 12, 5];  // Special short lines for Level 4
+      let strokeFactorArr = [0.5, 0.7, 1.0, 0.9];
+
+      let varyAmount = varyAmountArr[activeLevel - 1];
+      let lenAmount = lenAmountArr[activeLevel - 1];
+      let strokeFactor = strokeFactorArr[activeLevel - 1];
+
+      let currentX = x + random(-varyAmount, varyAmount);
+      let currentY = y + random(-varyAmount, varyAmount);
+
       for (let step = 10; step > 0; step--) {
-        noiseGraphics.strokeWeight(step * 0.6);
+        let strokeW = step * strokeFactor;
+        noiseGraphics.strokeWeight(strokeW);
+
         let angleNoise = (noise(currentX * rez1, currentY * rez1) - 0.2) * 2;
-        let angle = angleNoise * PI * 0.2;
-        let nextX = cos(angle) * length + currentX;
-        let nextY = sin(angle) * length + currentY;
+        let angle = angleNoise * PI * (activeLevel === 1 ? 0.1 : 0.4 + 0.2 * activeLevel);
+
+        // Level 4
+        if (activeLevel === 4 && random() < 0.3) {
+          currentX += random(-40, 40);
+          currentY += random(-40, 40);
+        }
+
+        let nextX = cos(angle) * lenAmount + currentX;
+        let nextY = sin(angle) * lenAmount + currentY;
         noiseGraphics.line(currentX, currentY, nextX, nextY);
         currentX = nextX;
         currentY = nextY;
       }
     }
   }
+}
+
+function updateNoiseLayer() {
+  noiseGraphics.clear();
+  noiseGraphics.background(25, 80, 30);
+  drawNoiseLines();
+  applyPaperTexture(1);
+  applyPaperTexture(0);
 }
 
 function applyPaperTexture(textureType) {
@@ -1213,6 +1296,70 @@ function applyPaperTexture(textureType) {
     noiseGraphics.pop();
   }
   noiseGraphics.colorMode(HSB, 360, 100, 100, 255);
+} // End of sky drawing *********************************
+
+
+// Button class
+class Button {
+  constructor(label, x, y, action) {
+    this.label = label; // Text shown on the button
+    this.x = x; // X Position on the canvas
+    this.y = y;  // Y Position on the canvas
+    this.w = 80; // Button width
+    this.h = 30; // Button width
+    this.action = action; // A function that runs when the button is pressed
+  }
+  isHovered() { // Returns true if the mouse is over the button area
+    return mouseX > this.x && mouseX < this.x + this.w &&
+      mouseY > this.y && mouseY < this.y + this.h;
+  }
+
+  show() {
+    if (this.isHovered()) {
+      fill(209, 99, 0); //Hover Color
+    } else {
+      fill(248, 208, 19); //Default Color
+    }
+    noStroke();
+    rect(this.x, this.y, this.w, this.h, 5); // Draw button (rounded)
+    textSize(17);
+    fill(0);
+    text(this.label, this.x + this.w / 2, this.y + this.h / 2); // Draw label
+  }
+
+  clicked(mx, my) { // Checks if the mouse click falls inside the button’s area
+    return mx > this.x && mx < this.x + this.w && my > this.y && my < this.y + this.h;
+  }
+}
+
+function drawButtons() { // Loop through the array of buttons and calls show() on each one
+  for (let b of buttons) {
+    b.show();
+  }
+}
+
+// This code implements the function of updating activeLevel when the mouse clicks the button
+function mousePressed() { // Button clicked
+  for (let b of buttons) {
+    if (b.clicked(mouseX, mouseY)) {
+      b.action();
+    }
+  }
 }
 
 
+function windowResized() { // Make elements adjust to window size
+  resizeCanvas(windowWidth, windowHeight);
+  createButtons();  // Recalculate button positions
+  
+  scaleX = windowWidth / originW;
+  scaleY = windowHeight / originH;
+
+  noiseGraphics = createGraphics(windowWidth, windowHeight);
+  noiseGraphics.colorMode(HSB, 360, 100, 100, 255);
+  noiseGraphics.background(25, 80, 30);
+  noiseGraphics.strokeCap(SQUARE);
+  drawNoiseLines();
+  applyPaperTexture(1);
+  applyPaperTexture(0);
+} 
