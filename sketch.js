@@ -1,7 +1,7 @@
-// Audio Visualiser version 1: Only the sound interaction of Level 3 was created, because I found the reference code of Level 3 that I preferred at the beginning.
-// When I created this code, the group code was not fully completed, so I created it in the p5 editor, original code reference: https://editor.p5js.org/yslllll122/sketches/A_qz-rDOO
+// Audio Visualiser version 2: Tried to add Level 4 animation, but failed. Only music, no animation.
+// When I created this code, the group code was not fully completed, so I created it in the p5 editor, original code reference: https://editor.p5js.org/yslllll122/sketches/f51P-uJrt
 /* Since after the group code is completed, my historical code based on the historical version of the group code can no longer be started normally. 
-So I will delete the original group code and replace it with my original code. */
+So the following is the group code I tried at that time. */
 
 let rez1;
 let rez2;
@@ -29,7 +29,11 @@ let buttons = [];
 
 
 // Audio visualiser
-let music, fft;
+let musicL3, fftL3; // part3.mp3
+let musicL4, fftL4; // part4.mp3
+let eSize = 40; // Original cube for level 4
+const l4Palette = ['#e1be1c','#c35314','#598bac','#1a4965','#151c2e','#69855f','#27453b','#cdb994'];
+
 
 // Particals, effect refer to: https://openprocessing.org/sketch/1725734
 const pCount = 1200;
@@ -40,7 +44,8 @@ const bass = { low: 200, high: 255, hueShift: 150 };
 const mid  = { low: 140, high: 170, hueShift: 220 };
 
 function preload() {
-  music = loadSound('part3.mp3');
+  musicL3 = loadSound('part3.mp3');
+  musicL4 = loadSound('part4.mp3');
 }
 
 
@@ -61,13 +66,15 @@ function createButtons() {
   //Define Buttons - changed from my group member code to let lake and land work together
   buttons.push(new Button("Level 1", width / 2 - spacing, y, () => {
     activeLevel = 1;
-    if (music && music.isPlaying()) music.stop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (musicL4.isPlaying()) musicL4.stop();
     drawPG2();
   }));
   
   buttons.push(new Button("Level 2", width / 2 - spacing / 3, y, () => {
     activeLevel = 2;
-    if (music && music.isPlaying()) music.stop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (musicL4.isPlaying()) musicL4.stop();
     drawPG2();
   }));
   
@@ -79,14 +86,16 @@ function createButtons() {
   // Add button plays music
   buttons.push(new Button("Level 3", width / 2 + spacing / 3, y, () => {
   activeLevel = 3;
-  if (!music.isPlaying()) music.loop();   // 循环播放
+  if (musicL4.isPlaying()) musicL4.stop();
+  if (!musicL3.isPlaying()) musicL3.loop();
   drawPG2();
 }));
 
   
   buttons.push(new Button("Level 4", width / 2 + spacing, y, () => {
     activeLevel = 4;
-    if (music && music.isPlaying()) music.stop();
+    if (musicL3.isPlaying()) musicL3.stop();
+    if (!musicL4.isPlaying()) musicL4.loop();
     drawPG2();
   }));
 }
@@ -113,8 +122,12 @@ function setup() {
   noStroke();
   
   // For audio visualiser
-  fft = new p5.FFT(0.8, 256); //Smooth 0.8, 256 bands
+  fftL3 = new p5.FFT(0.8, 256); //Smooth 0.8, 256 bands
+  fftL3.setInput(musicL3);
   pSpacing = sqrt(width * height / pCount); // Particle grid spacing
+  
+  fftL4 = new p5.FFT();
+  fftL4.setInput(musicL4);
 
   colPalette = [
   color('#e1be1c'),
@@ -309,7 +322,8 @@ function draw() {
   if (activeLevel > 0) {
   let levelTexts = ["", "level 1", "level 2", "level 3", "level 4"];
     
-  if (activeLevel === 3) drawAudioVisualiser();
+  if (activeLevel === 3) drawL3Visualiser();
+  if (activeLevel === 4) drawL4Visualiser();
     
   // Render the character
   drawScreamCharacter(levelTexts[activeLevel]);
@@ -526,8 +540,8 @@ function drawRightCircles() {
 }
 
 // Refer to: https://openprocessing.org/sketch/1725734
-function drawAudioVisualiser() {
-  fft.analyze(); // Update spectrum
+function drawL3Visualiser() {
+  fftL3.analyze(); // Update spectrum
 
   // Bass
   // let e = map(fft.getEnergy('bass'), bass.low, bass.high, 0, 100, true);
@@ -536,7 +550,7 @@ function drawAudioVisualiser() {
   // stroke(e + bass.hueShift, e, 100, 128);
   // strokeWeight(e / 8);
   //Bass changed colors based on preset:
-  let e = map(fft.getEnergy('bass'), bass.low, bass.high, 0, 1, true); // 0-1
+  let e = map(fftL3.getEnergy('bass'), bass.low, bass.high, 0, 1, true); // 0-1
 let bassIdx = floor(e * (colPalette.length - 1));                    // 0-4
 stroke(colPalette[bassIdx]);
 strokeWeight( map(e,0,1,1,8) );
@@ -556,8 +570,8 @@ strokeWeight( map(e,0,1,1,8) );
   // stroke(e + mid.hueShift, e, 100, 128);
   // strokeWeight(e / 8);
   // Midrange changed colors based on preset:
-  e = map(fft.getEnergy('mid'), mid.low, mid.high, 0, 1, true);
-let midIdx = colPalette.length - 1 - floor(e * (colPalette.length - 1)); // 反向挑色
+  e = map(fftL3.getEnergy('mid'), mid.low, mid.high, 0, 1, true);
+let midIdx = colPalette.length - 1 - floor(e * (colPalette.length - 1));
 stroke(colPalette[midIdx]);
 strokeWeight( map(e,0,1,1,8) );
 
@@ -572,6 +586,139 @@ strokeWeight( map(e,0,1,1,8) );
   pOffset += pSpeed; // Rotation increment
 }
 
+//Level 4 audio visualiser, refer to: https://openprocessing.org/sketch/2237575/
+function drawL4Visualiser() {
+  const spectrum = fftL4.analyze();
+
+  push();
+  // translate(width/2, height/2);
+
+  drawingContext.save();
+  noStroke();
+  noFill();
+  beginShape();
+    vertex(1351.35*scaleX, 388.26*scaleY);
+    bezierVertex((1351.35-286.45)*scaleX,(388.26+127.97)*scaleY,
+                 (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY,
+                 (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY);
+    bezierVertex(320.13*scaleX,251*scaleY,
+                 0,625.71*scaleY,
+                 0,625.71*scaleY);
+    vertex(0,1280*scaleY);
+    vertex(1811*scaleX,1280*scaleY);
+    vertex(1811*scaleX,429.84*scaleY);
+    bezierVertex((1811-114.81)*scaleX,(429.84-206.71)*scaleY,
+                 (1811-459.65)*scaleX,(429.84-41.58)*scaleY,
+                 (1811-459.65)*scaleX,(429.84-41.58)*scaleY);
+  endShape(CLOSE);
+  drawingContext.clip(); // Clipping has followed translation
+
+  /* Draw a rectangular grid */
+  let step = eSize, idx = 0;
+  for (let x=0; x<=width; x+=step) {
+    for (let y=0; y<=height; y+=step) {
+      const sx = spectrum[int(map(x, 0, width,  0, 512)) % 128]*0.01;
+      const sy = spectrum[int(map(y, 0, height, 0, 512)) % 128]*0.01;
+      // rotate(sx+sy);
+
+      fill(l4Palette[int(random(l4Palette.length))] + 'BA');
+      rect(
+        // x*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
+        // y*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
+        x, y, 
+        abs(step*0.5*sy*cos(y*frameCount*0.0001)),
+        abs(step*0.5*sy*cos(y*frameCount*0.0001)),
+        10*abs(sin(frameCount*0.001))
+      );
+
+      stroke(l4Palette[idx++ % l4Palette.length]);
+      rect(
+        x*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
+        y*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
+        abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
+        abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
+        10*abs(cos(frameCount*0.001))
+      );
+    }
+  }
+  pop();                // Reset translate
+  drawingContext.restore();
+
+  if (frameCount % 120 === 0) eSize = random(30,100);
+}
+
+
+// function drawL4Visualiser() {
+//   // Update FFT
+//   let spectrum = fftL4.analyze();
+
+//   // Clipping within Wave2 outline
+//   push();
+//   drawingContext.save();
+//   noStroke();
+//   noFill();
+//   beginShape();
+//   // Copy the 13 vertices/beziers of drawWave2 (only change to vertex/bez, no fill)
+//   vertex(1351.35*scaleX,388.26*scaleY);
+//   bezierVertex((1351.35-286.45)*scaleX,(388.26+127.97)*scaleY,
+//                (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY,
+//                (1351.35-501.68)*scaleX,(388.26+54.74)*scaleY);
+//   bezierVertex(320.13*scaleX,251*scaleY,0,625.71*scaleY,0,625.71*scaleY);
+//   vertex(0,1280*scaleY);
+//   vertex(1811*scaleX,1280*scaleY);
+//   vertex(1811*scaleX,429.84*scaleY);
+//   bezierVertex((1811-114.81)*scaleX,(429.84-206.71)*scaleY,
+//                (1811-459.65)*scaleX,(429.84-41.58)*scaleY,
+//                (1811-459.65)*scaleX,(429.84-41.58)*scaleY);
+//   endShape(CLOSE);
+
+//   // Draw a rectangular grid
+//   let idx = 0;
+//   let step = eSize;
+//   translate(width/2, height/2);
+//   for (let x=-width/2; x<=width/2; x+=step) {
+//     for (let y=-height/2; y<=height/2; y+=step) {
+      
+//     drawingContext.clip();           // Key: Paint only on the water surface area
+
+
+//       // Map x / y to spectrum index (0~512)
+//       let sx = spectrum[int(map(x, -width/2, width/2, 0, 512)) % 128]*0.01;
+//       let sy = spectrum[int(map(y, -height/2, height/2, 0, 512)) % 128]*0.01;
+
+//       rotate(sx+sy);
+
+//       // Filled Rectangle
+//       fill(l4Palette[int(random(l4Palette.length))] + 'BA');
+//       rect(
+//         x*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
+//         y*abs(step*0.5*sy*cos(y*frameCount*0.0001))/2,
+//         abs(step*0.5*sy*cos(y*frameCount*0.0001)),
+//         abs(step*0.5*sy*cos(y*frameCount*0.0001)),
+//         10*abs(sin(frameCount*0.001))
+//       );
+
+//       // Stroke rectangle
+//       stroke(l4Palette[idx % l4Palette.length]);
+//       rect(
+//         x*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
+//         y*abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx)/2 + step/2,
+//         abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
+//         abs(step*0.5*sx*sin(x*frameCount*0.0001)+sx),
+//         10*abs(cos(frameCount*0.001))
+//       );
+//       idx++;
+//     }
+//   }
+
+//   // Randomly change size/stroke every two seconds
+//   if (frameCount % 120 === 0) {
+//       eSize = random(30,100);
+//   }
+
+//   drawingContext.restore();
+//   pop();
+// }
 
 
 // Define a Group class to represent a group of shapes
