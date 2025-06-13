@@ -40,6 +40,7 @@ The first reference (the girl hiding her face, encircled by messy doodles) expre
 ### (b) Pop-art shock panel – “external blast”  
 
 ![Comic–style panic explosion](./panic.png)
+
 Image from shutterstock
 
 The second inspiration image shows a man in a classic comic-book *jump scare*: an explosion effect behind him, red halftone dots everywhere. It screams sudden, public, uncontrollable fear. I extracted two components:
