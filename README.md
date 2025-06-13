@@ -90,3 +90,4 @@ In every case I kept only the geometric skeleton; all audio binding, colour sele
 
 * Added `noStroke()` around the character’s nostrils to stop the outline colour flickering once the audio visualiser began driving global stroke settings.
 * Drew the **ghost character** before the four visualiser layers, so the new background effects can sit on top without obscuring the screaming figure.
+* Used spaces = [200, 160, 110] in my individual version (vs. group’s 200, 160, 120) to enhance yellow visibility at Level 4.
