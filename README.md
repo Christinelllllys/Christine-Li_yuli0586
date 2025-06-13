@@ -29,6 +29,7 @@ Two classic visual elements shaped the design:
 ### (a) Tangled-scribble diagram – “inner noise”
 
 ![Girl surrounded by messy lines](./messymind.png)
+Image from vecteezy
 
 The first reference (the girl hiding her face, encircled by messy doodles) expresses *cognitive overload* rather than outright panic. Those spaghetti-lines are thin, continuous, and still loosely organised; they look like hurried thoughts looping in place.
 
@@ -39,6 +40,7 @@ The first reference (the girl hiding her face, encircled by messy doodles) expre
 ### (b) Pop-art shock panel – “external blast”  
 
 ![Comic–style panic explosion](./panic.png)
+Image from shutterstock
 
 The second inspiration image shows a man in a classic comic-book *jump scare*: an explosion effect behind him, red halftone dots everywhere. It screams sudden, public, uncontrollable fear. I extracted two components:
 
