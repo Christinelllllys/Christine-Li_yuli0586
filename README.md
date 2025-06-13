@@ -78,6 +78,7 @@ Removing the extra stroked square layer that existed in the reference sketch lig
 * The dot-column idea from [OpenProcessing 967789](https://openprocessing.org/sketch/967789)
 * The particle flow from [OpenProcessing 1725734](https://openprocessing.org/sketch/1725734)
 * The spinning-grid concept from [OpenProcessing 2237575](https://openprocessing.org/sketch/2237575/)
+
 In every case I kept only the geometric skeleton; all audio binding, colour selection and most parameter mappings were rewritten so the four levels form a clear, escalating narrative that matches Vivaldi’s *Winter* excerpt and the color palette of lake & land.
 
 ### Edits to the shared code-base
